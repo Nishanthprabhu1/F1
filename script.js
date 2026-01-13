@@ -1,12 +1,12 @@
-/* script.js - Jewels-Ai Atelier: Smart Loading & Speed Optimized */
+/* script.js - Jewels-Ai Atelier: Clean Look (No Sparkles, No Shadows) */
 
 /* --- CONFIGURATION --- */
 const API_KEY = "AIzaSyAXG3iG2oQjUA_BpnO8dK8y-MHJ7HLrhyE"; 
 const UPLOAD_SCRIPT_URL = "https://script.google.com/macros/s/AKfycby96W9Mf1fvsfdp7dpzRCEiQEvFEg3ZiSa-iEnYgbr4Zu2bC7IcQVMTxudp4QDofAg3/exec";
 
 const DRIVE_FOLDERS = {
-  earrings: "1eftKhpOHbCj8hzO11-KioFv03g0Yn61n",
-  chains: "1G136WEiA9QBSLtRk0LW1fRb3HDZb4VBD",
+  earrings: "1ySHR6Id5RxVj16-lf7NMN9I61RPySY9s",
+  chains: "1BHhizdJ4MDfrqITTkynshEL9D0b1MY-J",
   rings: "1iB1qgTE-Yl7w-CVsegecniD_DzklQk90",
   bangles: "1d2b7I8XlhIEb8S_eXnRFBEaNYSwngnba"
 };
@@ -118,7 +118,7 @@ function processVoiceCommand(cmd) {
     else if (cmd.includes('bangle')) selectJewelryType('bangles');
 }
 
-/* --- 3. GOOGLE DRIVE FETCHING (OPTIMIZED) --- */
+/* --- 3. GOOGLE DRIVE FETCHING --- */
 async function fetchFromDrive(category) {
     if (JEWELRY_ASSETS[category]) return;
     const folderId = DRIVE_FOLDERS[category];
@@ -126,7 +126,7 @@ async function fetchFromDrive(category) {
     
     if(videoElement.paused) {
         loadingStatus.style.display = 'block'; 
-        loadingStatus.textContent = "Connecting to Cloud...";
+        loadingStatus.textContent = "Fetching Designs...";
     }
     
     try {
@@ -135,10 +135,8 @@ async function fetchFromDrive(category) {
         const response = await fetch(url);
         const data = await response.json();
         if (data.error) throw new Error(data.error.message);
-        
         JEWELRY_ASSETS[category] = data.files.map(file => {
-            // OPTIMIZATION: Use s1024 instead of s3000 (Faster load, good enough for AR)
-            const src = file.thumbnailLink ? file.thumbnailLink.replace(/=s\d+$/, "=s1024") : `https://drive.google.com/uc?export=view&id=${file.id}`;
+            const src = file.thumbnailLink ? file.thumbnailLink.replace(/=s\d+$/, "=s3000") : `https://drive.google.com/uc?export=view&id=${file.id}`;
             return { id: file.id, name: file.name, src: src };
         });
     } catch (err) { 
@@ -147,50 +145,27 @@ async function fetchFromDrive(category) {
     }
 }
 
-/* --- SMART LOADER: First 5 Priority --- */
-async function loadAssetsSmart(type) {
-    // 1. Fetch the file list first
+async function preloadCategory(type) {
     await fetchFromDrive(type);
     if (!JEWELRY_ASSETS[type]) {
         loadingStatus.style.display = 'none';
         return;
     }
-
-    // 2. Initialize storage array if empty
     if (!PRELOADED_IMAGES[type]) {
-        PRELOADED_IMAGES[type] = new Array(JEWELRY_ASSETS[type].length).fill(null);
-    }
-
-    // 3. Helper to load a specific index
-    const loadIndex = (index) => {
-        return new Promise((resolve) => {
-            if (PRELOADED_IMAGES[type][index]) { resolve(); return; } // Already loaded
-            const img = new Image(); 
-            img.crossOrigin = 'anonymous'; 
-            img.onload = () => { PRELOADED_IMAGES[type][index] = img; resolve(); }; 
-            img.onerror = () => { resolve(); }; // Continue even on error
-            img.src = JEWELRY_ASSETS[type][index].src;
+        PRELOADED_IMAGES[type] = [];
+        const promises = JEWELRY_ASSETS[type].map(file => {
+            return new Promise((resolve) => {
+                const img = new Image(); img.crossOrigin = 'anonymous'; 
+                img.onload = () => resolve(img); img.onerror = () => resolve(null); 
+                img.src = file.src; PRELOADED_IMAGES[type].push(img);
+            });
         });
-    };
-
-    // 4. LOAD FIRST 5 IMAGES (Blocking - User waits for these)
-    if(videoElement.paused) loadingStatus.textContent = "Loading Collection...";
-    
-    const initialLoadCount = Math.min(5, JEWELRY_ASSETS[type].length);
-    const initialPromises = [];
-    for(let i=0; i<initialLoadCount; i++) {
-        initialPromises.push(loadIndex(i));
+        if(videoElement.paused) {
+             loadingStatus.textContent = "Downloading Assets...";
+        }
+        await Promise.all(promises); 
     }
-    await Promise.all(initialPromises);
-
-    // 5. UNLOCK UI (User can start playing now)
     loadingStatus.style.display = 'none';
-
-    // 6. LOAD REMAINDER (Background - Non-blocking)
-    // We do not await this. It runs silently.
-    for(let i=initialLoadCount; i<JEWELRY_ASSETS[type].length; i++) {
-        loadIndex(i); 
-    }
 }
 
 /* --- 4. WHATSAPP AUTOMATION --- */
@@ -289,35 +264,26 @@ hands.onResults((results) => {
           handSmoother.bangle.size = lerp(handSmoother.bangle.size, targetBangleWidth, SMOOTH_FACTOR);
       }
 
-      // --- DRAW RING ---
+      // --- DRAW RING (Shadow Removed) ---
       if (ringImg && ringImg.complete) {
           const rHeight = (ringImg.height / ringImg.width) * handSmoother.ring.size;
           canvasCtx.save(); 
           canvasCtx.translate(handSmoother.ring.x, handSmoother.ring.y); 
           canvasCtx.rotate(handSmoother.ring.angle); 
           
-          canvasCtx.shadowColor = "rgba(0, 0, 0, 0.3)";
-          canvasCtx.shadowBlur = 10;
-          canvasCtx.shadowOffsetX = 5;
-          canvasCtx.shadowOffsetY = 5;
-
           const currentDist = handSmoother.ring.size / 0.6;
+          // Image offset 
           const yOffset = currentDist * 0.15;
           canvasCtx.drawImage(ringImg, -handSmoother.ring.size/2, yOffset, handSmoother.ring.size, rHeight); 
           canvasCtx.restore();
       }
 
-      // --- DRAW BANGLE ---
+      // --- DRAW BANGLE (Shadow Removed) ---
       if (bangleImg && bangleImg.complete) {
           const bHeight = (bangleImg.height / bangleImg.width) * handSmoother.bangle.size;
           canvasCtx.save(); 
           canvasCtx.translate(handSmoother.bangle.x, handSmoother.bangle.y); 
           canvasCtx.rotate(handSmoother.bangle.angle);
-
-          canvasCtx.shadowColor = "rgba(0, 0, 0, 0.3)";
-          canvasCtx.shadowBlur = 10;
-          canvasCtx.shadowOffsetX = 6;
-          canvasCtx.shadowOffsetY = 6;
 
           canvasCtx.drawImage(bangleImg, -handSmoother.bangle.size/2, -bHeight/2, handSmoother.bangle.size, bHeight); 
           canvasCtx.restore();
@@ -367,7 +333,7 @@ faceMesh.onResults((results) => {
       const ratio = distToLeft / (distToLeft + distToRight);
       const xShift = ew * 0.05; 
 
-      canvasCtx.shadowColor = "transparent";
+      /* Shadow Code Removed */
 
       if (ratio > 0.2) { 
           canvasCtx.save(); 
@@ -389,10 +355,7 @@ faceMesh.onResults((results) => {
     if (necklaceImg && necklaceImg.complete) {
       let nw = earDist * 0.85; let nh = (necklaceImg.height/necklaceImg.width) * nw;
       
-      canvasCtx.shadowColor = "rgba(0, 0, 0, 0.3)";
-      canvasCtx.shadowBlur = 10;
-      canvasCtx.shadowOffsetX = 0; 
-      canvasCtx.shadowOffsetY = 6;
+      /* Shadow Code Removed */
       
       const neckY = neck.y + (earDist*0.1);
       canvasCtx.drawImage(necklaceImg, neck.x - nw/2, neckY, nw, nh);
@@ -401,7 +364,7 @@ faceMesh.onResults((results) => {
   canvasCtx.restore();
 });
 
-/* --- INITIALIZATION --- */
+/* --- UPDATED: SAFE INITIALIZATION --- */
 window.onload = async () => {
     await startCameraFast('user');
     setTimeout(() => { loadingStatus.style.display = 'none'; }, 5000);
@@ -409,99 +372,45 @@ window.onload = async () => {
 };
 
 /* --- UI HELPERS --- */
-function highlightThumbnail(index) {
-    const container = document.getElementById('jewelry-options');
-    Array.from(container.children).forEach((c, i) => { 
-        if(i === index) {
-            c.style.borderColor = "var(--accent)"; 
-            c.style.transform = "scale(1.05)";
-            c.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
-        } else {
-            c.style.borderColor = "rgba(255,255,255,0.2)"; 
-            c.style.transform = "scale(1)";
-        }
-    });
-}
-
-function applyImageToModel(type, img) {
-    if (type === 'earrings') earringImg = img;
-    else if (type === 'chains') necklaceImg = img;
-    else if (type === 'rings') ringImg = img;
-    else if (type === 'bangles') bangleImg = img;
-}
-
 function navigateJewelry(dir) {
   if (!currentType || !PRELOADED_IMAGES[currentType]) return;
   const list = PRELOADED_IMAGES[currentType];
-  
-  // Find current index
-  let currentImgObj = (currentType === 'earrings') ? earringImg : (currentType === 'chains') ? necklaceImg : (currentType === 'rings') ? ringImg : bangleImg;
-  let idx = list.indexOf(currentImgObj); 
-  if (idx === -1) idx = 0; 
-
+  let currentImg = (currentType === 'earrings') ? earringImg : (currentType === 'chains') ? necklaceImg : (currentType === 'rings') ? ringImg : bangleImg;
+  let idx = list.indexOf(currentImg); if (idx === -1) idx = 0; 
   let nextIdx = (idx + dir + list.length) % list.length;
-  
-  // FAILSAFE: If user navigates faster than background loader
-  if (!list[nextIdx]) {
-      // Force load specific image immediately
-      const fileData = JEWELRY_ASSETS[currentType][nextIdx];
-      const newImg = new Image();
-      newImg.crossOrigin = 'anonymous';
-      newImg.src = fileData.src;
-      PRELOADED_IMAGES[currentType][nextIdx] = newImg;
-      applyImageToModel(currentType, newImg);
-  } else {
-      applyImageToModel(currentType, list[nextIdx]);
-  }
-  highlightThumbnail(nextIdx);
+  const nextItem = list[nextIdx];
+  if (currentType === 'earrings') earringImg = nextItem;
+  else if (currentType === 'chains') necklaceImg = nextItem;
+  else if (currentType === 'rings') ringImg = nextItem;
+  else if (currentType === 'bangles') bangleImg = nextItem;
 }
 
 async function selectJewelryType(type) {
   currentType = type;
-  
-  // 1. Render UI First (if visited before)
-  if (JEWELRY_ASSETS[type]) renderThumbnails(type);
-
-  // 2. Start Camera Switch
   const targetMode = (type === 'rings' || type === 'bangles') ? 'environment' : 'user';
-  startCameraFast(targetMode);
+  await startCameraFast(targetMode);
 
-  // 3. Reset Current
-  earringImg = null; necklaceImg = null; ringImg = null; bangleImg = null;
+  if(type !== 'earrings') earringImg = null; if(type !== 'chains') necklaceImg = null;
+  if(type !== 'rings') ringImg = null; if(type !== 'bangles') bangleImg = null;
 
-  // 4. SMART LOAD (First 5 blocks, rest background)
-  await loadAssetsSmart(type);
-  
-  // 5. Render Thumbnails (If first visit)
-  if (!document.getElementById('jewelry-options').hasChildNodes()) {
-      renderThumbnails(type);
+  await preloadCategory(type); 
+  if (PRELOADED_IMAGES[type] && PRELOADED_IMAGES[type].length > 0) {
+      const firstItem = PRELOADED_IMAGES[type][0];
+      if (type === 'earrings') earringImg = firstItem; else if (type === 'chains') necklaceImg = firstItem;
+      else if (type === 'rings') ringImg = firstItem; else if (type === 'bangles') bangleImg = firstItem;
   }
-
-  // 6. Set First Image
-  if (PRELOADED_IMAGES[type] && PRELOADED_IMAGES[type][0]) {
-      applyImageToModel(type, PRELOADED_IMAGES[type][0]);
-      highlightThumbnail(0);
-  }
-}
-
-function renderThumbnails(type) {
-  const container = document.getElementById('jewelry-options'); 
-  container.innerHTML = ''; container.style.display = 'flex';
+  const container = document.getElementById('jewelry-options'); container.innerHTML = ''; container.style.display = 'flex';
   if (!JEWELRY_ASSETS[type]) return;
 
   JEWELRY_ASSETS[type].forEach((file, i) => {
-    const btnImg = new Image(); 
-    btnImg.src = file.src; // Use the URL we already have
-    btnImg.crossOrigin = 'anonymous'; btnImg.className = "thumb-btn"; 
-    
+    const btnImg = new Image(); btnImg.src = file.src; btnImg.crossOrigin = 'anonymous'; btnImg.className = "thumb-btn"; 
+    if(i === 0) { btnImg.style.borderColor = "var(--accent)"; btnImg.style.transform = "scale(1.05)"; }
     btnImg.onclick = () => {
-        // If clicked before background loader finished this specific one
-        if(!PRELOADED_IMAGES[type][i]) {
-            const newImg = new Image(); newImg.crossOrigin = 'anonymous'; newImg.src = file.src;
-            PRELOADED_IMAGES[type][i] = newImg;
-        }
-        applyImageToModel(type, PRELOADED_IMAGES[type][i]);
-        highlightThumbnail(i);
+        Array.from(container.children).forEach(c => { c.style.borderColor = "rgba(255,255,255,0.2)"; c.style.transform = "scale(1)"; });
+        btnImg.style.borderColor = "var(--accent)"; btnImg.style.transform = "scale(1.05)";
+        const fullImg = PRELOADED_IMAGES[type][i];
+        if (type === 'earrings') earringImg = fullImg; else if (type === 'chains') necklaceImg = fullImg;
+        else if (type === 'rings') ringImg = fullImg; else if (type === 'bangles') bangleImg = fullImg;
     };
     container.appendChild(btnImg);
   });
@@ -525,20 +434,10 @@ function stopAutoTry() {
 async function runAutoStep() {
     if (!autoTryRunning) return;
     const assets = PRELOADED_IMAGES[currentType];
-    
-    // Ensure asset is loaded before trying
     if (!assets || autoTryIndex >= assets.length) { stopAutoTry(); return; }
-    
-    if(!assets[autoTryIndex]) {
-        // If background loader hasn't reached here, force load it
-        const fileData = JEWELRY_ASSETS[currentType][autoTryIndex];
-        const newImg = new Image(); newImg.crossOrigin = 'anonymous'; newImg.src = fileData.src;
-        await new Promise(r => { newImg.onload = r; newImg.onerror = r; });
-        assets[autoTryIndex] = newImg;
-    }
-
-    applyImageToModel(currentType, assets[autoTryIndex]);
-    
+    const targetImg = assets[autoTryIndex];
+    if (currentType === 'earrings') earringImg = targetImg; else if (currentType === 'chains') necklaceImg = targetImg;
+    else if (currentType === 'rings') ringImg = targetImg; else if (currentType === 'bangles') bangleImg = targetImg;
     autoTryTimeout = setTimeout(() => { triggerFlash(); captureToGallery(); autoTryIndex++; runAutoStep(); }, 1500); 
 }
 
@@ -559,10 +458,15 @@ function captureToGallery() {
   
   let displayName = "Jewels-Ai Look";
   if (currentType && PRELOADED_IMAGES[currentType]) {
-      let currentImgObj = (currentType === 'earrings') ? earringImg : (currentType === 'chains') ? necklaceImg : (currentType === 'rings') ? ringImg : bangleImg;
-      const idx = PRELOADED_IMAGES[currentType].indexOf(currentImgObj);
-      if (idx !== -1 && JEWELRY_ASSETS[currentType][idx]) {
-          displayName = JEWELRY_ASSETS[currentType][idx].name.replace(/\.[^/.]+$/, "");
+      let currentImgObj = null;
+      if (currentType === 'earrings') currentImgObj = earringImg; else if (currentType === 'chains') currentImgObj = necklaceImg;
+      else if (currentType === 'rings') currentImgObj = ringImg; else if (currentType === 'bangles') currentImgObj = bangleImg;
+
+      if (currentImgObj) {
+          const idx = PRELOADED_IMAGES[currentType].indexOf(currentImgObj);
+          if (idx !== -1 && JEWELRY_ASSETS[currentType] && JEWELRY_ASSETS[currentType][idx]) {
+              displayName = JEWELRY_ASSETS[currentType][idx].name.replace(/\.[^/.]+$/, "");
+          }
       }
   }
   
